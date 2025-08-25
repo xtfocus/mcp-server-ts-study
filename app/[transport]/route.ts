@@ -1,58 +1,38 @@
-import { createMcpHandler } from "mcp-handler";
-import { z } from "zod";
+import {
+  createMcpHandler,
+  withMcpAuth,
+} from "mcp-handler";
+import { validateGitHubToken } from "@/lib/github";
+import { registerAllTools } from "@/tools";
+import { AuthInfo } from "@/lib/types";
 
-const handler = createMcpHandler(
-  async (server) => {
-    server.tool(
-      "echo",
-      "description",
-      {
-        message: z.string(),
-      },
-      async ({ message }) => ({
-        content: [{ type: "text", text: `Tool echo: ${message}` }],
-      })
-    );
-
-    server.tool(
-      "roll_dice",
-      "Roll one or more dice with specified number of sides",
-      {
-        sides: z.number().min(1).max(1000).default(6).describe("Number of sides on the dice (default: 6)"),
-        count: z.number().min(1).max(100).default(1).describe("Number of dice to roll (default: 1)"),
-      },
-      async ({ sides, count }) => {
-        const results = [];
-        const total = [];
-        
-        for (let i = 0; i < count; i++) {
-          const roll = Math.floor(Math.random() * sides) + 1;
-          results.push(roll);
-          total.push(roll);
-        }
-        
-        const sum = total.reduce((acc, val) => acc + val, 0);
-        
-        let resultText = `Rolled ${count} ${sides}-sided dice: [${results.join(', ')}]`;
-        if (count > 1) {
-          resultText += `\nTotal: ${sum}`;
-        }
-        
-        return {
-          content: [{ type: "text", text: resultText }],
-        };
-      }
-    );
+// Create the base MCP handler with tool registration
+const baseHandler = createMcpHandler(
+  (server) => {
+    // Register basic tools that are always available
+    registerAllTools(server, {
+      token: "",
+      clientId: "",
+      scopes: [],
+      extra: { user: null, subject: "", audience: "" }
+    });
   },
   {
     capabilities: {
       tools: {
         echo: {
-          description: "Echo a message",
+          description: "Echo a message with user context",
         },
         roll_dice: {
           description: "Roll one or more dice with specified number of sides",
         },
+        adminInfo: {
+          description: "Get admin information (privileged users only)",
+        },
+        githubUserInfo: {
+          description: "Get information about the authenticated GitHub user",
+        },
+
       },
     },
   },
@@ -63,4 +43,26 @@ const handler = createMcpHandler(
   }
 );
 
-export { handler as GET, handler as POST, handler as DELETE };
+// Create authenticated handler with GitHub OAuth
+const authenticatedHandler = withMcpAuth(
+  baseHandler,
+  async (_, token): Promise<AuthInfo | undefined> => {
+    if (!token) return undefined;
+    
+    try {
+      // Validate the GitHub token
+      const authInfo = await validateGitHubToken(token);
+      return authInfo;
+    } catch (error) {
+      console.error('Token validation failed:', error);
+      return undefined;
+    }
+  },
+  { 
+    required: true,
+    requiredScopes: ['read:user'],
+    resourceMetadataPath: '/.well-known/oauth-protected-resource/mcp',
+  }
+);
+
+export { authenticatedHandler as GET, authenticatedHandler as POST, authenticatedHandler as DELETE };
