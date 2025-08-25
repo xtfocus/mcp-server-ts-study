@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupportedScopes, OAUTH_CONFIG } from '@/lib/oauth-config';
 
 /**
- * OAuth Authorization Server Metadata endpoint
+ * Catch-all route for recursive OAuth authorization server discovery
  * 
- * This endpoint provides metadata about the authorization server (GitHub)
- * that the MCP client is trying to discover.
+ * This handles cases where the client incorrectly appends paths to the authorization server URL
+ * and returns the same metadata as the main authorization server endpoint.
  */
 
 export async function GET(request: NextRequest) {
@@ -15,7 +14,7 @@ export async function GET(request: NextRequest) {
     token_endpoint: `${request.nextUrl.origin}/api/oauth/token`,
     userinfo_endpoint: `${request.nextUrl.origin}/api/oauth/userinfo`,
     registration_endpoint: `${request.nextUrl.origin}/api/oauth/register`,
-    scopes_supported: getSupportedScopes(),
+    scopes_supported: ['read:user'],
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code'],
     token_endpoint_auth_methods_supported: ['client_secret_post'],

@@ -2,19 +2,20 @@ import {
   createMcpHandler,
   withMcpAuth,
 } from "mcp-handler";
-import { validateGitHubToken } from "@/lib/github";
+import { validateProxyToken } from "@/lib/proxy-token-validation";
 import { registerAllTools } from "@/tools";
 import { AuthInfo } from "@/lib/types";
+import { getRequiredScopes } from "@/lib/oauth-config";
 
-// Create the base MCP handler with tool registration
+// Create the base MCP handler
 const baseHandler = createMcpHandler(
   (server) => {
-    // Register basic tools that are always available
+    // Register tools with the server
     registerAllTools(server, {
-      token: "",
-      clientId: "",
+      token: '',
       scopes: [],
-      extra: { user: null, subject: "", audience: "" }
+      clientId: '',
+      extra: {}
     });
   },
   {
@@ -32,7 +33,6 @@ const baseHandler = createMcpHandler(
         githubUserInfo: {
           description: "Get information about the authenticated GitHub user",
         },
-
       },
     },
   },
@@ -43,15 +43,19 @@ const baseHandler = createMcpHandler(
   }
 );
 
-// Create authenticated handler with GitHub OAuth
+// Create authenticated handler with OAuth Proxy
 const authenticatedHandler = withMcpAuth(
   baseHandler,
-  async (_, token): Promise<AuthInfo | undefined> => {
+  async (server, token): Promise<AuthInfo | undefined> => {
     if (!token) return undefined;
     
     try {
-      // Validate the GitHub token
-      const authInfo = await validateGitHubToken(token);
+      // Validate the proxy token
+      const authInfo = await validateProxyToken(token);
+      
+      // Tools are already registered in the base handler
+      // The auth info will be available to the tools through the server context
+      
       return authInfo;
     } catch (error) {
       console.error('Token validation failed:', error);
@@ -60,8 +64,8 @@ const authenticatedHandler = withMcpAuth(
   },
   { 
     required: true,
-    requiredScopes: ['read:user'],
-    resourceMetadataPath: '/.well-known/oauth-protected-resource/mcp',
+    requiredScopes: getRequiredScopes(),
+    resourceMetadataPath: '/.well-known/oauth-protected-resource',
   }
 );
 

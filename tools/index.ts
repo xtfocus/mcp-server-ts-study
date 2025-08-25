@@ -12,8 +12,8 @@ export function registerAllTools(server: any, authInfo: AuthInfo) {
     'echo',
     'Echo a message with user context',
     { message: z.string().describe('The message to echo') },
-    async ({ message }) => {
-      const user = authInfo.extra.user;
+    async ({ message }: { message: string }) => {
+      const user = authInfo.extra?.userData;
       const userInfo = user ? ` (User: ${user.login})` : '';
       
       return {
@@ -33,7 +33,7 @@ export function registerAllTools(server: any, authInfo: AuthInfo) {
       sides: z.number().int().min(2).max(100).describe('Number of sides on the die'),
       count: z.number().int().min(1).max(10).default(1).describe('Number of dice to roll')
     },
-    async ({ sides, count }) => {
+    async ({ sides, count }: { sides: number; count: number }) => {
       const results = [];
       for (let i = 0; i < count; i++) {
         const value = 1 + Math.floor(Math.random() * sides);
@@ -56,7 +56,7 @@ export function registerAllTools(server: any, authInfo: AuthInfo) {
     'Get admin information (privileged users only)',
     {},
     async () => {
-      const user = authInfo.extra.user;
+      const user = authInfo.extra?.userData;
       const hasAdminScope = authInfo.scopes.includes('admin:org') || authInfo.scopes.includes('admin:user');
       
       if (!hasAdminScope) {
@@ -91,7 +91,7 @@ export function registerAllTools(server: any, authInfo: AuthInfo) {
     'Get information about the authenticated GitHub user',
     {},
     async () => {
-      const user = authInfo.extra.user;
+      const user = authInfo.extra?.userData;
       
       if (!user) {
         return {

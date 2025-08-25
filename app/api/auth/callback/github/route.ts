@@ -23,35 +23,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Exchange authorization code for access token
-    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        client_id: process.env.GITHUB_CLIENT_ID,
-        client_secret: process.env.GITHUB_CLIENT_SECRET,
-        code: code,
-        redirect_uri: `${request.nextUrl.origin}/api/auth/callback/github`,
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error(`GitHub token exchange failed: ${tokenResponse.status}`);
+    // Get the GitHub access token from our storage using the authorization code
+    const authCodeData = await fetch(`${request.nextUrl.origin}/api/debug/auth-codes?code=${code}`).then(r => r.json());
+    
+    if (!authCodeData.found) {
+      throw new Error('Authorization code not found or expired');
     }
-
-    const tokenData = await tokenResponse.json();
-
-    if (tokenData.error) {
-      throw new Error(`GitHub OAuth error: ${tokenData.error_description || tokenData.error}`);
-    }
-
-    const accessToken = tokenData.access_token;
-
+    
+    // Use the GitHub access token directly for web login
+    const accessToken = authCodeData.data.accessToken;
+    
     if (!accessToken) {
-      throw new Error('No access token received from GitHub');
+      throw new Error('No access token available');
     }
 
     // Create a response that sets the token in localStorage via JavaScript

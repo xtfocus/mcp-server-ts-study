@@ -1,22 +1,45 @@
 # GitHub OAuth MCP Server
 
-**Uses `mcp-handler` with GitHub OAuth Authentication**
+**OAuth Proxy Pattern with Dynamic Client Registration**
 
-This MCP server demonstrates how to implement OAuth 2.1 authentication using GitHub as the authorization server. The server provides various tools that require different levels of GitHub permissions.
+This MCP server implements GitHub OAuth authentication using the **OAuth Proxy Pattern**, which enables Dynamic Client Registration (DCR) while maintaining compatibility with GitHub OAuth. The server acts as an OAuth authorization server for MCP clients and proxies authentication requests to GitHub.
 
 ## Features
 
-- 🔐 **GitHub OAuth Authentication**: Secure access using GitHub Personal Access Tokens
-- 🛠️ **Multiple Tools**: Echo, dice rolling, admin info, GitHub user info, and repository listing
-- 🔒 **Scope-based Access Control**: Different tools require different GitHub scopes
-- 📋 **OAuth Metadata Endpoint**: Compliant with MCP specification for OAuth discovery
+- 🔐 **GitHub OAuth Authentication**: Secure access using GitHub OAuth
+- 🛠️ **Multiple Tools**: Echo, dice rolling, admin info, and GitHub user info
+- 🔒 **Scope-based Access Control**: Minimal scopes (`read:user`) for security
+- 📋 **OAuth Metadata Endpoints**: Full OAuth 2.1 discovery compliance
+- 🚀 **Dynamic Client Registration**: Automatic client registration (RFC7591)
+- 🛡️ **OAuth Proxy Pattern**: Enables DCR with GitHub OAuth
+- 🌐 **Web Login Interface**: Simple login page at `localhost:3000`
 
 ## Available Tools
 
 1. **echo** - Echo a message with user context (requires `read:user`)
 2. **roll_dice** - Roll one or more dice with specified number of sides (requires `read:user`)
-3. **adminInfo** - Get admin information (requires `admin:org` or `admin:user`)
+3. **adminInfo** - Get admin information (requires `read:user`)
 4. **githubUserInfo** - Get information about the authenticated GitHub user (requires `read:user`)
+
+## How It Works
+
+### OAuth Proxy Pattern
+
+The server implements an **OAuth Proxy Pattern** that solves the fundamental incompatibility between GitHub OAuth (no DCR support) and MCP requirements (DCR required):
+
+1. **MCP Client Registration**: Clients register dynamically via `/api/oauth/register`
+2. **Authorization Request**: Clients request authorization via `/oauth/authorize`
+3. **GitHub OAuth**: Server redirects to GitHub using our OAuth App credentials
+4. **Token Exchange**: Server exchanges GitHub codes for our own tokens
+5. **MCP Access**: Clients use our tokens to access MCP tools
+
+### Security Features
+
+- **Minimal Scopes**: Always requests only `read:user` from GitHub
+- **Scope Filtering**: Ignores client-requested scopes for security
+- **PKCE Support**: Handles PKCE at our layer, not GitHub's
+- **Token Expiration**: 1-hour expiration for access tokens
+- **Client Validation**: Strict client credential validation
 
 ## GitHub OAuth Setup
 
@@ -25,55 +48,50 @@ This MCP server demonstrates how to implement OAuth 2.1 authentication using Git
 1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
 2. Click "New OAuth App"
 3. Fill in the details:
-   - **Application name**: `MCP Server`
+   - **Application name**: `MCP Server` (or any name you prefer)
    - **Homepage URL**: `http://localhost:3000` (for development)
-   - **Authorization callback URL**: `http://localhost:3000/api/auth/callback/github`
+   - **Authorization callback URL**: `http://localhost:3000/api/oauth/callback`
 4. Note down the **Client ID** and **Client Secret**
 
 ### 2. Configure Environment Variables
 
-Copy `.env.local.example` to `.env.local` and update the values:
+Create `.env.local` and add the following:
 
 ```bash
-# GitHub OAuth Configuration
+# GitHub OAuth Configuration (for our OAuth proxy)
 GITHUB_CLIENT_ID=your_github_client_id
 GITHUB_CLIENT_SECRET=your_github_client_secret
-NEXT_PUBLIC_GITHUB_CLIENT_ID=your_github_client_id
-
-# NextAuth Configuration
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your_nextauth_secret_here
 ```
 
-### 3. Create a GitHub Personal Access Token
-
-1. Go to [GitHub Personal Access Tokens](https://github.com/settings/tokens)
-2. Click "Generate new token (classic)"
-3. Select the following scopes:
-   - `read:user` (required for basic access)
-   - `user:email` (optional, for email access)
-4. Copy the generated token
+**Important**: These are the credentials for our GitHub OAuth App that acts as the proxy. MCP clients will register dynamically and get their own credentials.
 
 ## Usage
 
 ### Running the Server
 
 ```sh
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 The server will be available at `http://localhost:3000`.
 
+### Web Login Interface
+
+Visit `http://localhost:3000` to see a simple login interface that demonstrates the OAuth flow.
+
 ### Testing with MCP Inspector
 
-1. **Start the server**: `pnpm dev`
+1. **Start the server**: `npm run dev`
 2. **Open MCP Inspector** in your browser
-3. **Configure the connection**:
-   - **URL**: `http://localhost:3000/mcp`
-   - **Transport Type**: `streamable-http`
-   - **Authorization**: Add your GitHub Personal Access Token as a Bearer token
-4. **Connect** to test the server
+3. **Connect to**: `http://localhost:3000/mcp`
+4. **Follow the OAuth flow** - the Inspector will automatically:
+   - Register as a client
+   - Request authorization
+   - Complete GitHub OAuth
+   - Access MCP tools
+
+**No manual token configuration needed!** The OAuth flow handles everything automatically.
 
 ### Testing with Cursor
 
@@ -83,25 +101,42 @@ Add the following to your Cursor MCP configuration:
 {
   "mcpServers": {
     "github-mcp": {
-      "url": "http://localhost:3000/mcp",
-      "authorization": {
-        "type": "bearer",
-        "token": "your_github_personal_access_token"
-      }
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:3000/mcp"],
+      "env": {}
     }
   }
 }
 ```
 
-## OAuth Metadata Endpoint
+**Note**: Cursor will automatically handle the OAuth flow when you first connect.
 
-The server exposes an OAuth metadata endpoint at `/.well-known/oauth-protected-resource/mcp` that provides:
+## OAuth Discovery and Dynamic Client Registration
 
-- Authorization server URLs (GitHub)
-- Supported scopes
-- Resource information
+The server implements complete OAuth 2.1 discovery and Dynamic Client Registration (DCR) according to the MCP specification:
 
-This allows MCP clients to discover how to authenticate with the server.
+### **OAuth Discovery Endpoints:**
+- `/.well-known/oauth-protected-resource` - Protected resource metadata
+- `/.well-known/oauth-authorization-server` - Authorization server metadata
+- `/.well-known/openid-configuration` - OpenID Connect metadata
+
+### **Dynamic Client Registration:**
+- `POST /api/oauth/register` - Client registration endpoint (RFC7591)
+- Automatically generates client credentials for MCP clients
+- No manual registration required
+- Supports automatic client discovery and registration
+
+### **OAuth Endpoints:**
+- `GET /oauth/authorize` - Authorization endpoint
+- `POST /api/oauth/token` - Token exchange endpoint
+- `GET /api/oauth/userinfo` - User information endpoint
+
+### **What This Enables:**
+- **Seamless client registration** - MCP clients can automatically register
+- **No manual configuration** - No need to pre-register clients
+- **Standards compliance** - Follows OAuth 2.1 and RFC7591 specifications
+- **Automatic discovery** - Clients can discover all required endpoints
+- **GitHub OAuth compatibility** - Works with GitHub's OAuth system
 
 ## Deployment
 
@@ -109,43 +144,63 @@ This allows MCP clients to discover how to authenticate with the server.
 
 1. Push your code to GitHub
 2. Connect your repository to Vercel
-3. Set the environment variables in Vercel dashboard
+3. Set the environment variables in Vercel dashboard:
+   - `GITHUB_CLIENT_ID`
+   - `GITHUB_CLIENT_SECRET`
 4. Deploy
 
 ### Environment Variables for Production
 
-Update your `.env.local` for production:
+Update your GitHub OAuth App for production:
+- **Authorization callback URL**: `https://your-app.vercel.app/api/oauth/callback`
 
-```bash
-NEXTAUTH_URL=https://your-app.vercel.app
-```
+### Production Considerations
+
+For production deployment, you'll need to:
+- Replace file-based storage with a database
+- Set up monitoring and error tracking
+- Configure proper security headers
+- Set up automated backups
+
+See `CONSIDERATION.md` for detailed production deployment guide.
 
 ## Security Notes
 
 - Never commit your `.env.local` file to version control
 - Use environment variables for all sensitive configuration
-- Regularly rotate your GitHub Personal Access Tokens
-- Consider using GitHub Apps instead of OAuth Apps for production use
+- The server always requests minimal scopes (`read:user`) from GitHub
+- Client-requested scopes are filtered for security
+- Access tokens expire after 1 hour
+- Authorization codes expire after 10 minutes
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **"Invalid GitHub token" error**: Ensure your token has the required scopes
-2. **"Access denied" for admin tools**: Your token needs `admin:org` or `admin:user` scope
-3. **"Access denied" for repository tools**: Your token needs `repo` or `public_repo` scope
+1. **"The redirect_uri is not associated with this application"**: Update your GitHub OAuth App callback URL to `http://localhost:3000/api/oauth/callback`
+2. **"No code found: server_error, Invalid client"**: Restart the server to reload client storage
+3. **"GitHub token exchange failed: 400"**: Check that your GitHub OAuth App credentials are correct
+4. **Broad scopes displayed by GitHub**: Revoke existing authorization for your OAuth App in GitHub Settings > Applications
 
-### Debug Mode
+### Debug Endpoints
 
-Enable verbose logging by setting `verboseLogs: true` in the MCP handler configuration.
+In development, you can access debug endpoints:
+- `GET /api/debug/clients` - List registered clients
+- `GET /api/debug/auth-codes?code=xxx` - Check authorization codes
+
+### Storage
+
+The server uses file-based storage (`.oauth-storage.json`) for development. This file persists OAuth data between server restarts.
+
+See `COMMON_ISSUES.md` for detailed troubleshooting guide.
 
 ## Local Development
 
 ### Running the Server
 
 ```sh
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 The server will be available at `http://localhost:3000`.
@@ -154,36 +209,33 @@ The server will be available at `http://localhost:3000`.
 
 To test this MCP server using the [MCP Inspector](https://modelcontextprotocol.io/inspector):
 
-1. **Start the server**: `pnpm dev`
+1. **Start the server**: `npm run dev`
 2. **Open MCP Inspector** in your browser
-3. **Configure the connection**:
-   - **URL**: `http://localhost:3000/mcp`
-   - **Transport Type**: `streamable-http`
-4. **Connect** to test the server
+3. **Connect to**: `http://localhost:3000/mcp`
+4. **Follow the OAuth flow** - no manual configuration needed
 
-**Note**: Use the `/mcp` endpoint (not `/sse`) to avoid Redis requirements. The `/mcp` endpoint uses HTTP transport which works without additional dependencies.
+**Note**: The `/mcp` endpoint uses HTTP transport which works without additional dependencies.
 
-## Notes for running on Vercel
+## Testing Scripts
 
-- To use the SSE transport, requires a Redis attached to the project under `process.env.REDIS_URL`
-- Make sure you have [Fluid compute](https://vercel.com/docs/functions/fluid-compute) enabled for efficient execution
-- After enabling Fluid compute, open `app/route.ts` and adjust `maxDuration` to 800 if you using a Vercel Pro or Enterprise account
-- [Deploy the Next.js MCP template](https://vercel.com/templates/next.js/model-context-protocol-mcp-with-next-js)
-
-## Sample Clients
-
-### HTTP Transport (Recommended for local testing)
-
-`scripts/test-streamable-http-client.mjs` contains a sample client for HTTP transport (no Redis required).
+The project includes several test scripts for different scenarios:
 
 ```sh
-node scripts/test-streamable-http-client.mjs http://localhost:3000
+# Test basic OAuth functionality
+node scripts/test-oauth.mjs
+
+# Test complete OAuth proxy flow
+node scripts/test-complete-flow.mjs
+
+# Test web login flow
+node scripts/test-web-login.mjs
+
+# Test scope filtering
+node scripts/test-scope-filtering.mjs
 ```
 
-### SSE Transport (Requires Redis)
+## Architecture Documentation
 
-`scripts/test-client.mjs` contains a sample client for SSE transport (requires Redis).
-
-```sh
-node scripts/test-client.mjs https://mcp-for-next-js.vercel.app
-```
+- **`ARCHITECTURE.md`** - Detailed architecture and security features
+- **`COMMON_ISSUES.md`** - Issues encountered and solutions implemented
+- **`CONSIDERATION.md`** - Production deployment requirements and considerations

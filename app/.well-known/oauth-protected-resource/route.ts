@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSupportedScopes, OAUTH_CONFIG } from '@/lib/oauth-config';
 
 /**
  * OAuth Protected Resource Metadata endpoint
@@ -15,10 +16,10 @@ export async function GET(request: NextRequest) {
   const metadata = {
     issuer: request.nextUrl.origin,
     authorization_servers: [`${request.nextUrl.origin}/.well-known/oauth-authorization-server`],
-    scopes_supported: ['read:user', 'user:email'],
+    scopes_supported: getSupportedScopes(),
     resource: request.nextUrl.origin,
-    resource_type: 'mcp-server',
-    resource_description: 'MCP Server with GitHub OAuth authentication',
+    resource_type: OAUTH_CONFIG.METADATA.RESOURCE_TYPE,
+    resource_description: OAUTH_CONFIG.METADATA.RESOURCE_DESCRIPTION,
   };
 
   return NextResponse.json(metadata, {

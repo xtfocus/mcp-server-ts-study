@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { OAUTH_CONFIG } from '@/lib/oauth-config';
 
 interface GitHubUser {
   id: number;
@@ -47,14 +48,43 @@ export default function HomePage() {
     }
   };
 
-  const handleGitHubLogin = () => {
-    const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
-    const redirectUri = `${window.location.origin}/api/auth/callback/github`;
-    const scope = 'read:user user:email';
-    
-    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${Math.random().toString(36).substring(7)}`;
-    
-    window.location.href = githubAuthUrl;
+  const handleGitHubLogin = async () => {
+    try {
+      setLoading(true);
+      
+      // Step 1: Register a client for this session
+      const registerResponse = await fetch('/api/oauth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_name: 'Web Login Client',
+          redirect_uris: [`${window.location.origin}/api/auth/callback/github`]
+        })
+      });
+
+      if (!registerResponse.ok) {
+        throw new Error('Failed to register client');
+      }
+
+      const clientData = await registerResponse.json();
+      
+      // Step 2: Start OAuth flow with our proxy
+      const redirectUri = `${window.location.origin}/api/auth/callback/github`;
+      const scope = OAUTH_CONFIG.SCOPE;
+      const state = Math.random().toString(36).substring(7);
+      
+      // Store client info for callback
+      sessionStorage.setItem('oauth_client_id', clientData.client_id);
+      sessionStorage.setItem('oauth_client_secret', clientData.client_secret);
+      sessionStorage.setItem('oauth_state', state);
+      
+      const authUrl = `/oauth/authorize?client_id=${clientData.client_id}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&state=${state}`;
+      
+      window.location.href = authUrl;
+    } catch (error) {
+      setError('Failed to start OAuth flow');
+      setLoading(false);
+    }
   };
 
   const handleLogout = () => {
