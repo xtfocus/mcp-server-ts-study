@@ -26,7 +26,7 @@ export const waitTool = {
       await tracker.setTotal(steps);
       
       for (let i = 0; i < steps; i++) {
-        const currentTime = (i + 1) * interval;
+        const currentTime = Math.min((i + 1) * interval, total);
         const progressMessage = message 
           ? `${message} (${currentTime}/${total}s)`
           : `Waiting... ${currentTime}/${total} seconds`;
