@@ -17,7 +17,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('github_token');
+    const token = localStorage.getItem('mcp_token');
     if (token) {
       fetchUserInfo(token);
     }
@@ -26,10 +26,10 @@ export default function HomePage() {
   const fetchUserInfo = async (token: string) => {
     try {
       setLoading(true);
-      const response = await fetch('https://api.github.com/user', {
+      const response = await fetch('/api/user', {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json',
+          'Accept': 'application/json',
         },
       });
 
@@ -37,12 +37,12 @@ export default function HomePage() {
         throw new Error('Invalid token');
       }
 
-      const userData = await response.json();
-      setUser(userData);
+      const data = await response.json();
+      setUser(data.user);
       setError(null);
     } catch (err) {
       setError('Failed to fetch user info');
-      localStorage.removeItem('github_token');
+      localStorage.removeItem('mcp_token');
     } finally {
       setLoading(false);
     }
@@ -88,13 +88,13 @@ export default function HomePage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('github_token');
+    localStorage.removeItem('mcp_token');
     setUser(null);
     setError(null);
   };
 
   const copyToken = () => {
-    const token = localStorage.getItem('github_token');
+    const token = localStorage.getItem('mcp_token');
     if (token) {
       navigator.clipboard.writeText(token);
       alert('Token copied to clipboard!');
@@ -169,7 +169,7 @@ export default function HomePage() {
                   marginBottom: '10px'
                 }}
               >
-                Copy GitHub Token
+                Copy MCP Token
               </button>
               <div style={{ fontSize: '12px', color: '#666' }}>
                 <p><strong>MCP Endpoint:</strong> {window.location.origin}/mcp</p>

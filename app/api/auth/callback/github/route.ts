@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getClient } from '@/lib/oauth-storage';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -30,14 +31,44 @@ export async function GET(request: NextRequest) {
       throw new Error('Authorization code not found or expired');
     }
     
-    // Use the GitHub access token directly for web login
-    const accessToken = authCodeData.data.accessToken;
+    // Get client credentials from the stored client data
+    const clientId = authCodeData.data.clientId;
+    const client = getClient(clientId);
     
-    if (!accessToken) {
-      throw new Error('No access token available');
+    if (!client) {
+      throw new Error('Client not found');
+    }
+    
+    const clientSecret = client.client_secret;
+    
+    // Exchange the authorization code for an MCP access token
+    const tokenResponse = await fetch(`${request.nextUrl.origin}/api/oauth/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: `${request.nextUrl.origin}/api/auth/callback/github`,
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      throw new Error(`Token exchange failed: ${errorText}`);
     }
 
-    // Create a response that sets the token in localStorage via JavaScript
+    const tokenData = await tokenResponse.json();
+    const mcpAccessToken = tokenData.access_token;
+    
+    if (!mcpAccessToken) {
+      throw new Error('No MCP access token received');
+    }
+
+    // Create a response that sets the MCP token in localStorage via JavaScript
     const html = `
       <!DOCTYPE html>
       <html>
@@ -46,7 +77,7 @@ export async function GET(request: NextRequest) {
         </head>
         <body>
           <script>
-            localStorage.setItem('github_token', '${accessToken}');
+            localStorage.setItem('mcp_token', '${mcpAccessToken}');
             window.location.href = '/';
           </script>
           <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
