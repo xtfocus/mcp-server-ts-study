@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { AuthInfo } from '@/lib/types';
+import { toolRegistry } from './registry';
 
 /**
  * Registers all available tools with the MCP server
@@ -7,118 +7,65 @@ import { AuthInfo } from '@/lib/types';
  * @param authInfo - Authentication information from the user
  */
 export function registerAllTools(server: any, authInfo: AuthInfo) {
-  // Basic echo tool that includes user context
-  server.tool(
-    'echo',
-    'Echo a message with user context',
-    { message: z.string().describe('The message to echo') },
-    async ({ message }: { message: string }) => {
-      const user = authInfo.extra?.userData;
-      const userInfo = user ? ` (User: ${user.login})` : '';
-      
-      return {
-        content: [{ 
-          type: 'text', 
-          text: `Echo: ${message}${userInfo}` 
-        }],
-      };
-    },
-  );
-
-  // Dice rolling tool
-  server.tool(
-    'roll_dice',
-    'Roll one or more dice with specified number of sides',
-    { 
-      sides: z.number().int().min(2).max(100).describe('Number of sides on the die'),
-      count: z.number().int().min(1).max(10).default(1).describe('Number of dice to roll')
-    },
-    async ({ sides, count }: { sides: number; count: number }) => {
-      const results = [];
-      for (let i = 0; i < count; i++) {
-        const value = 1 + Math.floor(Math.random() * sides);
-        results.push(value);
+  console.log(`[ToolRegistry] Registering ${toolRegistry.length} tools`);
+  
+  for (const tool of toolRegistry) {
+    console.log(`[ToolRegistry] Registering tool: ${tool.name}`);
+    
+    // Register the tool with the server
+    server.tool(
+      tool.name,
+      tool.description,
+      tool.schema,
+      async (args: any, extra: any) => {
+        console.log(`[ToolRegistry] Executing tool: ${tool.name}`);
+        console.log(`[ToolRegistry] Args:`, args);
+        console.log(`[ToolRegistry] Extra:`, extra);
+        
+        // If the tool handler is a decorator (like withProgressTracking), we need to create a mock request
+        if (typeof tool.handler === 'function' && tool.handler.length === 2) {
+          // This is a decorator function that expects (request, extra)
+          console.log(`[ToolRegistry] Calling decorator handler`);
+          
+          // Create a mock request object that matches the expected structure
+          const mockRequest = {
+            params: {
+              arguments: args,
+              _meta: extra?._meta || {}
+            }
+          };
+          
+          return await tool.handler(mockRequest, extra);
+        } else {
+          // This is a regular handler that expects (args, authInfo)
+          console.log(`[ToolRegistry] Calling regular handler with args:`, args);
+          return await tool.handler(args, authInfo);
+        }
       }
-      
-      const resultText = count === 1 
-        ? `🎲 You rolled a ${results[0]}!`
-        : `🎲 You rolled: ${results.join(', ')} (${results.reduce((a, b) => a + b, 0)} total)`;
-      
-      return {
-        content: [{ type: 'text', text: resultText }],
-      };
-    },
-  );
+    );
+  }
+  
+  console.log(`[ToolRegistry] Successfully registered ${toolRegistry.length} tools`);
+}
 
-  // Admin information tool (only for users with admin scopes)
-  server.tool(
-    'adminInfo',
-    'Get admin information (privileged users only)',
-    {},
-    async () => {
-      const user = authInfo.extra?.userData;
-      const hasAdminScope = authInfo.scopes.includes('admin:org') || authInfo.scopes.includes('admin:user');
-      
-      if (!hasAdminScope) {
-        return {
-          content: [{ 
-            type: 'text', 
-            text: '❌ Access denied. This tool requires admin privileges.' 
-          }],
-        };
-      }
+/**
+ * Get all available tool names
+ */
+export function getAllToolNames(): string[] {
+  return toolRegistry.map(tool => tool.name);
+}
 
-      const adminInfo = {
-        user: user?.login || 'Unknown',
-        scopes: authInfo.scopes,
-        clientId: authInfo.clientId,
-        tokenType: 'GitHub OAuth',
-        permissions: 'Admin access granted'
-      };
-
-      return {
-        content: [{ 
-          type: 'text', 
-          text: `🔐 Admin Information:\n${JSON.stringify(adminInfo, null, 2)}` 
-        }],
-      };
-    },
-  );
-
-  // GitHub user info tool
-  server.tool(
-    'githubUserInfo',
-    'Get information about the authenticated GitHub user',
-    {},
-    async () => {
-      const user = authInfo.extra?.userData;
-      
-      if (!user) {
-        return {
-          content: [{ 
-            type: 'text', 
-            text: '❌ No user information available' 
-          }],
-        };
-      }
-
-      const userInfo = {
-        id: user.id,
-        login: user.login,
-        name: user.name || 'Not provided',
-        email: user.email || 'Not provided',
-        avatar_url: user.avatar_url,
-        scopes: authInfo.scopes
-      };
-
-      return {
-        content: [{ 
-          type: 'text', 
-          text: `👤 GitHub User Information:\n${JSON.stringify(userInfo, null, 2)}` 
-        }],
-      };
-    },
-  );
-
-
+/**
+ * Get tool capabilities for MCP server configuration
+ */
+export function getToolCapabilities() {
+  const capabilities: Record<string, { description: string }> = {};
+  
+  for (const tool of toolRegistry) {
+    capabilities[tool.name] = {
+      description: tool.description
+    };
+  }
+  
+  return capabilities;
 }

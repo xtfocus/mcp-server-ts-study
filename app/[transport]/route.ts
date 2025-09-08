@@ -3,7 +3,7 @@ import {
   withMcpAuth,
 } from "mcp-handler";
 import { validateProxyToken } from "@/lib/proxy-token-validation";
-import { registerAllTools } from "@/tools";
+import { registerAllTools, getToolCapabilities } from "@/tools";
 import { AuthInfo } from "@/lib/types";
 import { getRequiredScopes } from "@/lib/oauth-config";
 
@@ -20,20 +20,7 @@ const baseHandler = createMcpHandler(
   },
   {
     capabilities: {
-      tools: {
-        echo: {
-          description: "Echo a message with user context",
-        },
-        roll_dice: {
-          description: "Roll one or more dice with specified number of sides",
-        },
-        adminInfo: {
-          description: "Get admin information (privileged users only)",
-        },
-        githubUserInfo: {
-          description: "Get information about the authenticated GitHub user",
-        },
-      },
+      tools: getToolCapabilities(),
     },
   },
   {

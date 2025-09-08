@@ -13,13 +13,18 @@ This MCP server implements GitHub OAuth authentication using the **OAuth Proxy P
 - 🚀 **Dynamic Client Registration**: Automatic client registration (RFC7591)
 - 🛡️ **OAuth Proxy Pattern**: Enables DCR with GitHub OAuth
 - 🌐 **Web Login Interface**: Simple login page at `localhost:3000`
+- 📡 **Real-time Notifications**: Server-Sent Events (SSE) for progress updates
+- 🎯 **Progress Tracking**: Step-based and phase-based progress notifications
+- 🧪 **Comprehensive Testing**: 49 unit tests + integration test scripts
 
 ## Available Tools
 
 1. **echo** - Echo a message with user context (requires `read:user`)
-2. **roll_dice** - Roll one or more dice with specified number of sides (requires `read:user`)
-3. **adminInfo** - Get admin information (requires `read:user`)
-4. **githubUserInfo** - Get information about the authenticated GitHub user (requires `read:user`)
+2. **roll_dice** - Roll one or more dice with progress notifications (requires `read:user`)
+3. **wait** - Configurable wait with progress updates (requires `read:user`)
+4. **generic_notifier_demo** - Demonstrate generic notification capabilities (requires `read:user`)
+5. **adminInfo** - Get admin information (requires `read:user`)
+6. **githubUserInfo** - Get information about the authenticated GitHub user (requires `read:user`)
 
 ## How It Works
 
@@ -216,7 +221,42 @@ To test this MCP server using the [MCP Inspector](https://modelcontextprotocol.i
 
 **Note**: The `/mcp` endpoint uses HTTP transport which works without additional dependencies.
 
-## Testing Scripts
+## Testing
+
+The project includes comprehensive testing for both integration scenarios and unit tests for the notification system.
+
+### Unit Tests
+
+The notification system includes a complete test suite with 49 tests covering all core functionality:
+
+```sh
+# Run all unit tests
+npm test
+
+# Run tests with verbose output
+npx jest --verbose
+
+# Run specific test file
+npx jest lib/notifications/__tests__/base-notifier.test.ts
+
+# Run tests with coverage report
+npx jest --coverage
+```
+
+#### Test Coverage
+
+- **BaseNotificationHandler** (19 tests): Core notification functionality, state management, error handling
+- **ProgressTracker** (19 tests): Step-based progress tracking, history management, inheritance
+- **Configuration** (11 tests): Logging system, configuration management, default values
+
+#### Test Results
+```
+✓ Test Suites: 3 passed, 3 total
+✓ Tests: 49 passed, 49 total
+✓ Time: ~1.6s
+```
+
+### Integration Test Scripts
 
 The project includes several test scripts for different scenarios:
 
@@ -232,10 +272,72 @@ node scripts/test-web-login.mjs
 
 # Test scope filtering
 node scripts/test-scope-filtering.mjs
+
+# Test notification system
+node scripts/test-notifications.mjs
+
+# Test MCP client functionality
+node scripts/test-client.mjs
+
+# Test streamable HTTP client
+node scripts/test-streamable-http-client.mjs
 ```
+
+## Notification System
+
+The server includes a comprehensive notification system that enables real-time progress updates via Server-Sent Events (SSE). This system is designed to be:
+
+- **Generic**: No assumptions about task nature - developers can emit any type of notification
+- **Extensible**: Specialized classes for step-based and phase-based progress tracking
+- **Well-tested**: 49 unit tests covering all functionality
+- **Production-ready**: Comprehensive error handling and logging
+
+### Key Components
+
+- **BaseNotificationHandler**: Generic notification interface for any task type
+- **ProgressTracker**: Step-based progress tracking with history
+- **HierarchicalProgressTracker**: Phase-based progress with weighted completion
+- **NotificationService**: Centralized service for creating handlers and sending notifications
+- **Simplified Decorators**: Easy-to-use decorators for tool integration
+
+### Usage Examples
+
+```typescript
+// Generic notifications (no task assumptions)
+import { withNotifications } from '@/lib/mcp/simplified-decorators';
+
+export const myTool = {
+  handler: withNotifications(async (notifier, args) => {
+    if (notifier) {
+      await notifier.notify("Starting process", { step: 1 });
+      // ... do work ...
+      await notifier.complete("All done!");
+    }
+  })
+};
+
+// Step-based progress tracking
+import { withProgressTracking } from '@/lib/mcp/simplified-decorators';
+
+export const myTool = {
+  handler: withProgressTracking(async (tracker, args) => {
+    if (tracker) {
+      await tracker.setTotal(5);
+      for (let i = 0; i < 5; i++) {
+        await tracker.updateProgress(`Step ${i + 1}`);
+        // ... do work ...
+      }
+    }
+  })
+};
+```
+
+For detailed documentation, see `lib/notifications/README.md` and `lib/notifications/ARCHITECTURE.md`.
 
 ## Architecture Documentation
 
 - **`ARCHITECTURE.md`** - Detailed architecture and security features
 - **`COMMON_ISSUES.md`** - Issues encountered and solutions implemented
 - **`CONSIDERATION.md`** - Production deployment requirements and considerations
+- **`lib/notifications/README.md`** - Notification system documentation
+- **`lib/notifications/ARCHITECTURE.md`** - Notification system architecture
